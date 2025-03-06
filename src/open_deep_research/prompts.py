@@ -1,4 +1,4 @@
-report_planner_query_writer_instructions="""You are performing research for a report. 
+report_planner_query_writer_instructions = """You are performing research for a report.
 
 <Report topic>
 {topic}
@@ -9,7 +9,7 @@ report_planner_query_writer_instructions="""You are performing research for a re
 </Report organization>
 
 <Task>
-Your goal is to generate {number_of_queries} web search queries that will help gather information for planning the report sections. 
+Your goal is to generate {number_of_queries} web search queries that will help gather information for planning the report sections.
 
 The queries should:
 
@@ -20,7 +20,7 @@ Make the queries specific enough to find high-quality, relevant sources while co
 </Task>
 """
 
-report_planner_instructions="""I want a plan for a report that is concise and focused.
+report_planner_instructions = """I want a plan for a report that is concise and focused.
 
 <Report topic>
 The topic of the report is:
@@ -28,17 +28,17 @@ The topic of the report is:
 </Report topic>
 
 <Report organization>
-The report should follow this organization: 
+The report should follow this organization:
 {report_organization}
 </Report organization>
 
 <Context>
-Here is context to use to plan the sections of the report: 
+Here is context to use to plan the sections of the report:
 {context}
 </Context>
 
 <Task>
-Generate a list of sections for the report. Your plan should be tight and focused with NO overlapping sections or unnecessary filler. 
+Generate a list of sections for the report. Your plan should be tight and focused with NO overlapping sections or unnecessary filler.
 
 For example, a good report structure might look like:
 1/ intro
@@ -68,7 +68,7 @@ Here is feedback on the report structure from review (if any):
 </Feedback>
 """
 
-query_writer_instructions="""You are an expert technical writer crafting targeted web search queries that will gather comprehensive information for writing a technical report section.
+query_writer_instructions = """You are an expert technical writer crafting targeted web search queries that will gather comprehensive information for writing a technical report section.
 
 <Report topic>
 {topic}
@@ -79,11 +79,11 @@ query_writer_instructions="""You are an expert technical writer crafting targete
 </Section topic>
 
 <Task>
-Your goal is to generate {number_of_queries} search queries that will help gather comprehensive information above the section topic. 
+Your goal is to generate {number_of_queries} search queries that will help gather comprehensive information above the section topic.
 
 The queries should:
 
-1. Be related to the topic 
+1. Be related to the topic
 2. Examine different aspects of the topic
 
 Make the queries specific enough to find high-quality, relevant sources.
@@ -94,10 +94,10 @@ section_writer_instructions = """Write one section of a research report.
 
 <Task>
 1. Review the report topic, section name, and section topic carefully.
-2. If present, review any existing section content. 
+2. If present, review any existing section content.
 3. Then, look at the provided Source material.
 4. Decide the sources that you will use it to write a report section.
-5. Write the report section and list your sources. 
+5. Write the report section and list your sources.
 </Task>
 
 <Writing Guidelines>
@@ -125,7 +125,7 @@ section_writer_instructions = """Write one section of a research report.
 </Final Check>
 """
 
-section_writer_inputs=""" 
+section_writer_inputs = """
 <Report topic>
 {topic}
 </Report topic>
@@ -177,7 +177,7 @@ If the section content does not adequately address the section topic, generate {
 </format>
 """
 
-final_section_writer_instructions="""You are an expert technical writer crafting a section that synthesizes information from the rest of the report.
+final_section_writer_instructions = """You are an expert technical writer crafting a section that synthesizes information from the rest of the report.
 
 <Report topic>
 {topic}
@@ -187,7 +187,7 @@ final_section_writer_instructions="""You are an expert technical writer crafting
 {section_name}
 </Section name>
 
-<Section topic> 
+<Section topic>
 {section_topic}
 </Section topic>
 
@@ -214,7 +214,7 @@ For Conclusion/Summary:
     * Must include a focused comparison table using Markdown table syntax
     * Table should distill insights from the report
     * Keep table entries clear and concise
-- For non-comparative reports: 
+- For non-comparative reports:
     * Only use ONE structural element IF it helps distill the points made in the report:
     * Either a focused table comparing items present in the report (using Markdown table syntax)
     * Or a short list using proper Markdown list syntax:
