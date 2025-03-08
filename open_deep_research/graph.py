@@ -757,10 +757,7 @@ def deep_research_writer(state: SectionState, config: RunnableConfig):
 
     # Update section content with subsections
     updated_content = section.content.strip()
-    print(updated_content)
-
     main_heading_level = detect_main_section_level(updated_content)
-    print(main_heading_level)
     subsection_level = main_heading_level + 1
     detail_heading_level = main_heading_level  # 詳細分析セクションの見出しレベル（通常はメインと同じ）
 
