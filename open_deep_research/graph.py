@@ -786,7 +786,7 @@ def deep_research_writer(state: SectionState, config: RunnableConfig):
 
     # 詳細分析セクション数に基づいて詳細分析セクションの見出しを生成
     detail_count = count_detail_analysis_sections(updated_content)
-    detail_heading = generate_detail_heading(level=detail_heading_level, count=detail_count)
+    detail_heading = generate_detail_heading(level=detail_heading_level, count=detail_count, section_name=section.name)
     updated_content += "\n\n" + detail_heading + "\n\n" + formatted_subsections
 
     # update section with new content

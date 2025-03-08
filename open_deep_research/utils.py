@@ -967,10 +967,19 @@ def count_detail_analysis_sections(content):
     return count
 
 
-def generate_detail_heading(level, count):
-    """詳細分析セクションの見出しを生成"""
-    # 初回は「詳細分析」、2回目以降は「詳細分析1」「詳細分析2」などインデックス付きで
+def generate_detail_heading(level, count, section_name):
+    """詳細分析セクションの見出しを生成
+
+    Args:
+        level: 見出しレベル (# の数)
+        count: 詳細分析の番号 (0から始まる)
+        section_name: セクション名
+
+    Returns:
+        str: 見出し文字列
+    """
+    # 初回は「{section_name}: 詳細分析」、2回目以降は「{section_name}: 詳細分析1」「{section_name}: 詳細分析2」などインデックス付きで
     if count == 0:
-        return "#" * level + " 詳細分析"
+        return "#" * level + f" {section_name}: 詳細分析"
     else:
-        return "#" * level + f" 詳細分析{count + 1}"
+        return "#" * level + f" {section_name}: 詳細分析{count + 1}"
