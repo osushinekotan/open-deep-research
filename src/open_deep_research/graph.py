@@ -9,6 +9,7 @@ from langgraph.types import Command, interrupt
 
 from open_deep_research.configuration import Configuration
 from open_deep_research.prompts import (
+    conclusion_writer_instructions,
     deep_research_planner_instructions,
     deep_research_queries_instructions,
     deep_research_writer_instructions,
@@ -16,6 +17,7 @@ from open_deep_research.prompts import (
     introduction_query_writer_instructions,
     introduction_writer_instructions,
     query_writer_instructions,
+    question_to_plan_instructions,
     report_planner_instructions,
     report_planner_query_writer_instructions,
     section_grader_instructions,
@@ -28,6 +30,7 @@ from open_deep_research.state import (
     ReportState,
     ReportStateInput,
     ReportStateOutput,
+    Section,
     SectionOutputState,
     Sections,
     SectionState,
@@ -132,6 +135,7 @@ async def generate_introduction(state: ReportState, config: RunnableConfig):
     system_instructions = introduction_writer_instructions.format(
         topic=topic,
         context=source_str,
+        max_words=configurable.max_introduction_words,
     )
     system_instructions += f"\n\nPlease respond in **{configurable.language}** language."
 
@@ -142,11 +146,27 @@ async def generate_introduction(state: ReportState, config: RunnableConfig):
             HumanMessage(content="Write an introduction for the report based on the provided sources."),
         ]
     )
+    # Create a introduction section object
+    introduction_section = Section(
+        name="Introduction",
+        description="Provides an overview of the report topic and sets the stage for the main content.",
+        research=False,
+        content=introduction_content.content,
+    )
 
     return {
-        "introduction": introduction_content.content,
+        "completed_sections": [introduction_section],
         "all_urls": urls,
     }
+
+
+def determine_if_question(state: ReportState, config: RunnableConfig):
+    """Determine if the topic is a question."""
+    topic = state["topic"]
+
+    # TODO: use LLM to determine if the topic is a question
+    is_question = topic.strip().endswith(("?", "？"))  # Simple heuristic
+    return {"is_question": is_question}
 
 
 async def generate_report_plan(state: ReportState, config: RunnableConfig):
@@ -167,6 +187,7 @@ async def generate_report_plan(state: ReportState, config: RunnableConfig):
     """
     # Inputs
     topic = state["topic"]
+    is_question = state.get("is_question", False)  # default to False = report
     feedback = state.get("feedback_on_report_plan", None)
     introduction = state.get("introduction", "")
 
@@ -212,12 +233,20 @@ async def generate_report_plan(state: ReportState, config: RunnableConfig):
     source_str = await select_and_execute_search(search_api, query_list, params_to_pass)
 
     # Format system instructions
-    system_instructions_sections = report_planner_instructions.format(
-        topic=topic,
-        report_organization=report_structure,
-        context=source_str + "\n\nINTRODUCTION:\n" + introduction if introduction else source_str,
-        feedback=feedback,
-    )
+    if is_question:
+        system_instructions_sections = question_to_plan_instructions.format(
+            topic=topic,
+            report_organization=report_structure,
+            context=source_str + "\n\nINTRODUCTION:\n" + introduction if introduction else source_str,
+            feedback=feedback,
+        )
+    else:
+        system_instructions_sections = report_planner_instructions.format(
+            topic=topic,
+            report_organization=report_structure,
+            context=source_str + "\n\nINTRODUCTION:\n" + introduction if introduction else source_str,
+            feedback=feedback,
+        )
     system_instructions_sections += f"\n\nPlease respond in **{configurable.language}** language."
 
     # Set the planner
@@ -248,7 +277,8 @@ async def generate_report_plan(state: ReportState, config: RunnableConfig):
     # Get sections
     sections = report_sections.sections
 
-    return {"sections": sections}
+    sections = [s for s in sections if s.name.lower() != "conclusion"]
+    return {"sections": sections, "is_question": is_question}
 
 
 def human_feedback(
@@ -434,7 +464,7 @@ def write_section(state: SectionState, config: RunnableConfig) -> Command[Litera
     writer_model = init_chat_model(model=writer_model_name, model_provider=writer_provider, **writer_model_config)
     section_content = writer_model.invoke(
         [
-            SystemMessage(content=section_writer_instructions),
+            SystemMessage(content=section_writer_instructions.format(max_words=configurable.max_section_words)),
             HumanMessage(content=section_writer_inputs_formatted),
         ]
     )
@@ -483,6 +513,61 @@ def write_section(state: SectionState, config: RunnableConfig) -> Command[Litera
         )
 
 
+def write_conclusion(state: ReportState, config: RunnableConfig):
+    """Write a conclusion based on all completed sections.
+
+    Args:
+        state: Current state with all completed sections
+        config: Configuration for the conclusion writer model
+
+    Returns:
+        Dict with the written conclusion section
+    """
+    # Get configuration
+    configurable = Configuration.from_runnable_config(config)
+
+    # Get state
+    topic = state["topic"]
+    is_question = state.get("is_question", False)
+    completed_sections = state["completed_sections"]
+
+    # Format sections content
+    sections_content = format_sections(completed_sections)
+
+    # Format instructions
+    system_instructions = conclusion_writer_instructions.format(
+        topic=topic,
+        is_question=is_question,
+        sections_content=sections_content,
+        max_words=configurable.max_conclusion_words,
+    )
+    system_instructions += f"\n\nPlease respond in **{configurable.language}** language."
+
+    # Use the conclusion writer model if specified, otherwise use the regular writer model
+    writer_provider = get_config_value(configurable.conclusion_writer_provider)
+    writer_model_name = get_config_value(configurable.conclusion_writer_model)
+    writer_model_config = configurable.conclusion_writer_model_config or {}
+    writer_model = init_chat_model(model=writer_model_name, model_provider=writer_provider, **writer_model_config)
+
+    # Generate conclusion
+    conclusion_content = writer_model.invoke(
+        [
+            SystemMessage(content=system_instructions),
+            HumanMessage(content="Write a conclusion for this report based on the provided sections."),
+        ]
+    )
+
+    # Create a conclusion section object
+    conclusion_section = Section(
+        name="Conclusion",
+        description="Summarizes key findings and provides answers based on the report content.",
+        research=False,
+        content=conclusion_content.content,
+    )
+
+    return {"completed_sections": [conclusion_section]}
+
+
 def write_final_sections(state: SectionState, config: RunnableConfig):
     """Write sections that don't require research using completed sections as context.
 
@@ -510,6 +595,7 @@ def write_final_sections(state: SectionState, config: RunnableConfig):
         section_name=section.name,
         section_topic=section.description,
         context=completed_report_sections,
+        max_words=configurable.max_section_words,
     )
     system_instructions += f"\n\nPlease respond in **{configurable.language}** language."
 
@@ -606,7 +692,7 @@ def initiate_final_section_writing(state: ReportState):
             },
         )
         for s in state["sections"]
-        if not s.research
+        if (not s.research) and (s.name.lower() != "conclusion") and (s.name.lower() != "introduction")
     ]
 
 
@@ -738,6 +824,7 @@ def deep_research_writer(state: SectionState, config: RunnableConfig):
             section_name=section.name,
             subtopic=subtopic,
             search_results=search_results,
+            max_words=configurable.max_subsection_words,
         )
         system_instructions += f"\n\nPlease respond in **{configurable.language}** language."
 
@@ -816,6 +903,7 @@ builder = StateGraph(
     output=ReportStateOutput,
     config_schema=Configuration,
 )
+builder.add_node("determine_if_question", determine_if_question)
 builder.add_node("generate_introduction", generate_introduction)
 builder.add_node("generate_report_plan", generate_report_plan)
 builder.add_node("human_feedback", human_feedback)
@@ -823,18 +911,23 @@ builder.add_node("build_section_with_web_research", section_builder.compile())
 builder.add_node("gather_completed_sections", gather_completed_sections)
 builder.add_node("write_final_sections", write_final_sections)
 builder.add_node("compile_final_report", compile_final_report)
+builder.add_node("write_conclusion", write_conclusion)
+
 
 # Add edges
-builder.add_edge(START, "generate_introduction")
+builder.add_edge(START, "determine_if_question")
+builder.add_edge("determine_if_question", "generate_introduction")
 builder.add_edge("generate_introduction", "generate_report_plan")
 builder.add_edge("generate_report_plan", "human_feedback")
 builder.add_edge("build_section_with_web_research", "gather_completed_sections")
+
 builder.add_conditional_edges(
     "gather_completed_sections",
     initiate_final_section_writing,
     ["write_final_sections"],
 )
-builder.add_edge("write_final_sections", "compile_final_report")
+builder.add_edge("write_final_sections", "write_conclusion")
+builder.add_edge("write_conclusion", "compile_final_report")
 builder.add_edge("compile_final_report", END)
 
 graph = builder.compile()

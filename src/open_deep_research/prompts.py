@@ -33,7 +33,7 @@ Your introduction should:
 1. Provide background context on the topic
 2. Establish why the topic is important or relevant
 3. Briefly outline the scope of the report
-4. Be concise (150-200 words)
+4. Be concise (about {max_words} words)
 5. Use clear, engaging language
 
 Reference sources inline by adding superscript numbers [1], [2], etc. that correspond to the sources you are drawing information from.
@@ -88,7 +88,7 @@ For example, a good report structure might look like:
 3/ comparison between A and B
 4/ conclusion
 
-**caution: do not include `introduction` sections in the plan.**
+**caution: do not include `introduction` and `conclusion` sections in the plan.**
 
 Each section should have the fields:
 
@@ -146,7 +146,7 @@ section_writer_instructions = """Write one section of a research report.
 <Writing Guidelines>
 - If existing section content is not populated, write from scratch
 - If existing section content is populated, synthesize it with the source material
-- Strict 150-200 word limit
+- Maximum word count: about {max_words}
 - Use simple, clear language
 - Use short paragraphs (2-3 sentences max)
 - Use ## for section title (Markdown format)
@@ -242,7 +242,7 @@ final_section_writer_instructions = """You are an expert technical writer crafti
 
 For Introduction:
 - Use # for report title (Markdown format)
-- 50-100 word limit
+- Maximum word count: about {max_words}
 - Write in simple and clear language
 - Focus on the core motivation for the report in 1-2 paragraphs
 - Use a clear narrative arc to introduce the report
@@ -362,9 +362,83 @@ deep_research_writer_instructions = """あなたは技術文書作成の専門�
 2. 明確で簡潔な表現を使用する
 3. 検索結果に基づいた事実を提示する
 4. 情報源を引用する際は、関連する単語やフレーズに直接 [1], [2] などの形式で引用番号を埋め込む
-5. 200-300語程度に収める
+5. 約 {max_words} 語以内に収める
 
 サブセクションは元のセクションの一部として読めるようになっていることが重要です。
 引用リストや「出典」セクションは含めないでください。引用はすべて本文中に埋め込んでください。
+</Task>
+"""
+
+
+conclusion_writer_instructions = """You are an expert technical writer tasked with creating a conclusion for a research report.
+
+<Report topic>
+{topic}
+</Report topic>
+
+<Is topic a question>
+{is_question}
+</Is topic a question>
+
+<Section content>
+{sections_content}
+</Section content>
+
+<Task>
+Your task depends on whether the report topic is a question:
+
+If the topic is a question (is_question=True):
+1. Synthesize the information from all sections to provide a clear, direct answer to the question.
+2. Use ## Conclusion as the section header.
+3. Ensure your answer is well-supported by the content in the sections.
+4. Keep your answer concise, focusing on the most relevant information.
+5. Stay within about {max_words} words.
+
+If the topic is not a question (is_question=False):
+1. Summarize the key findings and insights from all sections of the report.
+2. Use ## Conclusion as the section header.
+3. Aim to provide a cohesive synthesis rather than just repeating section summaries.
+4. Include one structural element (either a bullet list or a small table) that distills the main points.
+5. Stay within about {max_words} words.
+
+In both cases:
+- Use clear, direct language
+- Focus on the most important information
+- Be objective and evidence-based
+- Write in the specified language
+</Task>
+"""
+
+
+question_to_plan_instructions = """You are helping to plan a research report that answers a specific question.
+
+<User Question>
+{topic}
+</User Question>
+
+<Report organization>
+{report_organization}
+</Report organization>
+
+<Context>
+{context}
+</Context>
+
+<Task>
+Create a plan for a report that will effectively answer the user's question. The plan should include sections that, when combined, will provide a comprehensive answer.
+
+1. Analyze the question to identify key components that need to be addressed
+2. Design logical sections that progress toward answering the question
+3. Ensure no critical aspects are omitted
+4. Exclude any "conclusion" section - this will be generated separately
+5. Focus on gathering factual information needed to answer the question
+
+Each section should have the fields:
+- Name - Name for this section of the report
+- Description - Brief overview of what this section will explore and how it contributes to answering the question
+- Research - Whether to perform web research for this section (default: True)
+- Content - The content of the section, which you will leave blank for now
+
+Do NOT include "Introduction" or "Conclusion" sections in the plan.
 </Task>
 """

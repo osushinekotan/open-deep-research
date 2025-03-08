@@ -5,17 +5,13 @@ from typing import Any, Optional
 
 from langchain_core.runnables import RunnableConfig
 
+# NOTE: introduction & conclusion are considered outside of the main body
 DEFAULT_REPORT_STRUCTURE = """Use this structure to create a report on the user-provided topic:
-
-1. Introduction (no research needed)
-   - Brief overview of the topic area
-
-2. Main Body Sections:
+Main Body Sections:
    - Each section should focus on a sub-topic of the user-provided topic
-
-3. Conclusion
-   - Aim for 1 structural element (either a list of table) that distills the main body sections
-   - Provide a concise summary of the report"""
+   - if user provided question, you should make critical sections to answer the question
+   - Do not include introduction or conclusion
+"""
 
 
 class SearchAPI(Enum):
@@ -47,6 +43,11 @@ class Configuration:
     number_of_queries: int = 2  # Number of search queries to generate per iteration
     max_reflection: int = 2  # Maximum number of reflection + search iterations
 
+    max_section_words: int = 1000  # セクション（main body）の最大単語数
+    max_subsection_words: int = 500  # サブセクションの最大単語数
+    max_introduction_words: int = 500  # イントロダクションの最大単語数
+    max_conclusion_words: int = 500  # 結論の最大単語数
+
     enable_deep_research: bool = True
     deep_research_depth: int = 1
     deep_research_breadth: int = 2
@@ -66,6 +67,14 @@ class Configuration:
         default_factory=lambda: {
             "max_tokens": 8192,
             "temperature": 0.0,
+        }
+    )
+
+    conclusion_writer_provider: WriterProvider = WriterProvider.OPENAI
+    conclusion_writer_model: str = "o3-mini"
+    conclusion_writer_model_config: Optional[dict[str, Any]] = field(
+        default_factory=lambda: {
+            "max_tokens": 8192,
         }
     )
 

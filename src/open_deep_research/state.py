@@ -50,12 +50,12 @@ class ReportStateOutput(TypedDict):
 
 class ReportState(TypedDict):
     topic: str  # Report topic
+    is_question: bool  # Flag to indicate if topic is a question
     feedback_on_report_plan: str  # Feedback on the report plan
     sections: list[Section]  # List of report sections
     completed_sections: Annotated[list, operator.add]  # Send() API key
     report_sections_from_research: str  # String of any completed sections from research to write final sections
     final_report: str  # Final report
-    introduction: str  # Introduction section
     all_urls: Annotated[list[str], operator.add]  # List of all URLs referenced
 
 
