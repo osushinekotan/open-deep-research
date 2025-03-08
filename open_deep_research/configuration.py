@@ -52,6 +52,8 @@ class Configuration:
     deep_research_depth: int = 1
     deep_research_breadth: int = 2
 
+    skip_human_feedback: bool = True
+
     planner_provider: PlannerProvider = PlannerProvider.OPENAI
     planner_model: str = "gpt-4o"
     planner_model_config: Optional[dict[str, Any]] = field(

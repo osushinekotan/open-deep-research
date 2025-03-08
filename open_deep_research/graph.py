@@ -299,6 +299,23 @@ def human_feedback(
     # Get sections
     topic = state["topic"]
     sections = state["sections"]
+
+    # Get configuration
+    configurable = Configuration.from_runnable_config(config)
+
+    # Check if we should skip human feedback
+    if configurable.skip_human_feedback:
+        # Skip the interrupt and go straight to section writing
+        return Command(
+            goto=[
+                Send(
+                    "build_section_with_web_research",
+                    {"topic": topic, "section": s, "search_iterations": 0},
+                )
+                for s in sections
+            ]
+        )
+
     sections_str = "\n\n".join(
         f"Section: {section.name}\n" f"Description: {section.description}\n" for section in sections
     )
