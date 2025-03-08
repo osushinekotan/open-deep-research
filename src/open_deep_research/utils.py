@@ -123,8 +123,6 @@ Section {idx}: {section.name}
 {"=" * 60}
 Description:
 {section.description}
-Requires Research:
-{section.research}
 
 Content:
 {section.content if section.content else "[Not yet written]"}

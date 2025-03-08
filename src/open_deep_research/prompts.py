@@ -36,7 +36,15 @@ Your introduction should:
 4. Be concise (about {max_words} words)
 5. Use clear, engaging language
 
-Reference sources inline by adding superscript numbers [1], [2], etc. that correspond to the sources you are drawing information from.
+Reference sources inline according to the citation rules.
+
+<Citation Rules>
+- Use inline citations by embedding links in Markdown format: `[text](URL)`.
+- Each citation should directly correspond to a source URL.
+- Avoid using superscript numbers `[1]`, `[2]`, etc., as they can make the text harder to read.
+- Ensure all citations are naturally integrated into the sentence.
+</Citation Rules>
+
 </Task>
 """
 
@@ -153,16 +161,16 @@ section_writer_instructions = """Write one section of a research report.
 </Writing Guidelines>
 
 <Citation Rules>
-- Use inline citations by adding superscript numbers where appropriate [1], [2], etc.
-- Each citation should directly correspond to a source URL
-- Number sources sequentially without gaps (1,2,3,4...)
-- DO NOT include a separate "Sources" section at the end of your content
+- Use inline citations by embedding links in Markdown format: `[text](URL)`.
+- Each citation should directly correspond to a source URL.
+- Avoid using superscript numbers `[1]`, `[2]`, etc., as they can make the text harder to read.
+- Ensure all citations are naturally integrated into the sentence.
 </Citation Rules>
 
 <Final Check>
 1. Verify that EVERY claim is grounded in the provided Source material and has an appropriate citation
 2. Confirm each citation is used correctly and corresponds to the right source
-3. Verify that citations are numbered sequentially (1,2,3...) without any gaps
+3. Verify that citations are naturally integrated into the text
 </Final Check>
 """
 
@@ -218,66 +226,6 @@ If the section content does not adequately address the section topic, generate {
     )
 </format>
 """
-
-final_section_writer_instructions = """You are an expert technical writer crafting a section that synthesizes information from the rest of the report.
-
-<Report topic>
-{topic}
-</Report topic>
-
-<Section name>
-{section_name}
-</Section name>
-
-<Section topic>
-{section_topic}
-</Section topic>
-
-<Available report content>
-{context}
-</Available report content>
-
-<Task>
-1. Section-Specific Approach:
-
-For Introduction:
-- Use # for report title (Markdown format)
-- Maximum word count: about {max_words}
-- Write in simple and clear language
-- Focus on the core motivation for the report in 1-2 paragraphs
-- Use a clear narrative arc to introduce the report
-- Include NO structural elements (no lists or tables)
-- No sources section needed
-
-For Conclusion/Summary:
-- Use ## for section title (Markdown format)
-- 100-150 word limit
-- For comparative reports:
-    * Must include a focused comparison table using Markdown table syntax
-    * Table should distill insights from the report
-    * Keep table entries clear and concise
-- For non-comparative reports:
-    * Only use ONE structural element IF it helps distill the points made in the report:
-    * Either a focused table comparing items present in the report (using Markdown table syntax)
-    * Or a short list using proper Markdown list syntax:
-      - Use `*` or `-` for unordered lists
-      - Use `1.` for ordered lists
-      - Ensure proper indentation and spacing
-- End with specific next steps or implications
-- No sources section needed
-
-3. Writing Approach:
-- Use concrete details over general statements
-- Make every word count
-- Focus on your single most important point
-</Task>
-
-<Quality Checks>
-- For introduction: 50-100 word limit, # for report title, no structural elements, no sources section
-- For conclusion: 100-150 word limit, ## for section title, only ONE structural element at most, no sources section
-- Markdown format
-- Do not include word count or any preamble in your response
-</Quality Checks>"""
 
 
 deep_research_planner_instructions = """
@@ -361,8 +309,15 @@ deep_research_writer_instructions = """あなたは技術文書作成の専門�
 1. マークダウン形式で、### レベルのヘッダー（サブセクションタイトル）から始める
 2. 明確で簡潔な表現を使用する
 3. 検索結果に基づいた事実を提示する
-4. 情報源を引用する際は、関連する単語やフレーズに直接 [1], [2] などの形式で引用番号を埋め込む
+4. 情報源は必ず引用し、以下のルールに従ったインライン引用を使用する
 5. 約 {max_words} 語以内に収める
+
+<Citation Rules>
+- インライン引用には、Markdown のリンク埋め込み形式 `[説明文](URL)` を使用する。
+- `[1]` のような番号リンクは使用せず、リンク先が何であるかを明示する。
+- 「[詳細はこちら](URL)」や「[公式ページ](URL)」のような表記も許可する。
+- 文章の流れを妨げず、自然に埋め込むようにする。
+</Citation Rules>
 
 サブセクションは元のセクションの一部として読めるようになっていることが重要です。
 引用リストや「出典」セクションは含めないでください。引用はすべて本文中に埋め込んでください。
@@ -389,17 +344,15 @@ Your task depends on whether the report topic is a question:
 
 If the topic is a question (is_question=True):
 1. Synthesize the information from all sections to provide a clear, direct answer to the question.
-2. Use ## Conclusion as the section header.
-3. Ensure your answer is well-supported by the content in the sections.
-4. Keep your answer concise, focusing on the most relevant information.
-5. Stay within about {max_words} words.
+2. Ensure your answer is well-supported by the content in the sections.
+3. Keep your answer concise, focusing on the most relevant information.
+4. Stay within about {max_words} words.
 
 If the topic is not a question (is_question=False):
 1. Summarize the key findings and insights from all sections of the report.
-2. Use ## Conclusion as the section header.
-3. Aim to provide a cohesive synthesis rather than just repeating section summaries.
-4. Include one structural element (either a bullet list or a small table) that distills the main points.
-5. Stay within about {max_words} words.
+2. Aim to provide a cohesive synthesis rather than just repeating section summaries.
+3. Include one structural element (either a bullet list or a small table) that distills the main points.
+4. Stay within about {max_words} words.
 
 In both cases:
 - Use clear, direct language
@@ -436,7 +389,6 @@ Create a plan for a report that will effectively answer the user's question. The
 Each section should have the fields:
 - Name - Name for this section of the report
 - Description - Brief overview of what this section will explore and how it contributes to answering the question
-- Research - Whether to perform web research for this section (default: True)
 - Content - The content of the section, which you will leave blank for now
 
 Do NOT include "Introduction" or "Conclusion" sections in the plan.

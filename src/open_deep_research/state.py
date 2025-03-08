@@ -11,7 +11,6 @@ class Section(BaseModel):
     description: str = Field(
         description="Brief overview of the main topics and concepts to be covered in this section.",
     )
-    research: bool = Field(description="Whether to perform web research for this section of the report.")
     content: str = Field(description="The content of the section.")
 
 
@@ -55,6 +54,8 @@ class ReportState(TypedDict):
     sections: list[Section]  # List of report sections
     completed_sections: Annotated[list, operator.add]  # Send() API key
     report_sections_from_research: str  # String of any completed sections from research to write final sections
+    introduction: str  # Introduction
+    conclusion: str  # Conclusion
     final_report: str  # Final report
     all_urls: Annotated[list[str], operator.add]  # List of all URLs referenced
 

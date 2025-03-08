@@ -13,7 +13,6 @@ from open_deep_research.prompts import (
     deep_research_planner_instructions,
     deep_research_queries_instructions,
     deep_research_writer_instructions,
-    final_section_writer_instructions,
     introduction_query_writer_instructions,
     introduction_writer_instructions,
     query_writer_instructions,
@@ -30,7 +29,6 @@ from open_deep_research.state import (
     ReportState,
     ReportStateInput,
     ReportStateOutput,
-    Section,
     SectionOutputState,
     Sections,
     SectionState,
@@ -146,16 +144,9 @@ async def generate_introduction(state: ReportState, config: RunnableConfig):
             HumanMessage(content="Write an introduction for the report based on the provided sources."),
         ]
     )
-    # Create a introduction section object
-    introduction_section = Section(
-        name="Introduction",
-        description="Provides an overview of the report topic and sets the stage for the main content.",
-        research=False,
-        content=introduction_content.content,
-    )
 
     return {
-        "completed_sections": [introduction_section],
+        "introduction": introduction_content.content,
         "all_urls": urls,
     }
 
@@ -231,6 +222,7 @@ async def generate_report_plan(state: ReportState, config: RunnableConfig):
 
     # Search the web with parameters
     source_str = await select_and_execute_search(search_api, query_list, params_to_pass)
+    urls = extract_urls_from_search_results(source_str)
 
     # Format system instructions
     if is_question:
@@ -278,7 +270,7 @@ async def generate_report_plan(state: ReportState, config: RunnableConfig):
     sections = report_sections.sections
 
     sections = [s for s in sections if s.name.lower() != "conclusion"]
-    return {"sections": sections, "is_question": is_question}
+    return {"sections": sections, "is_question": is_question, "all_urls": urls}
 
 
 def human_feedback(
@@ -304,10 +296,7 @@ def human_feedback(
     topic = state["topic"]
     sections = state["sections"]
     sections_str = "\n\n".join(
-        f"Section: {section.name}\n"
-        f"Description: {section.description}\n"
-        f"Research needed: {'Yes' if section.research else 'No'}\n"
-        for section in sections
+        f"Section: {section.name}\n" f"Description: {section.description}\n" for section in sections
     )
 
     # Get feedback on the report plan from interrupt
@@ -327,7 +316,6 @@ def human_feedback(
                     {"topic": topic, "section": s, "search_iterations": 0},
                 )
                 for s in sections
-                if s.research
             ]
         )
 
@@ -415,10 +403,12 @@ async def search_web(state: SectionState, config: RunnableConfig):
 
     # Search the web with parameters
     source_str = await select_and_execute_search(search_api, query_list, params_to_pass)
+    urls = extract_urls_from_search_results(source_str)
 
     return {
         "source_str": source_str,
         "search_iterations": state["search_iterations"] + 1,
+        "all_urls": urls,
     }
 
 
@@ -513,7 +503,7 @@ def write_section(state: SectionState, config: RunnableConfig) -> Command[Litera
         )
 
 
-def write_conclusion(state: ReportState, config: RunnableConfig):
+def generate_conclusion(state: ReportState, config: RunnableConfig):
     """Write a conclusion based on all completed sections.
 
     Args:
@@ -557,65 +547,7 @@ def write_conclusion(state: ReportState, config: RunnableConfig):
         ]
     )
 
-    # Create a conclusion section object
-    conclusion_section = Section(
-        name="Conclusion",
-        description="Summarizes key findings and provides answers based on the report content.",
-        research=False,
-        content=conclusion_content.content,
-    )
-
-    return {"completed_sections": [conclusion_section]}
-
-
-def write_final_sections(state: SectionState, config: RunnableConfig):
-    """Write sections that don't require research using completed sections as context.
-
-    This node handles sections like conclusions or summaries that build on
-    the researched sections rather than requiring direct research.
-
-    Args:
-        state: Current state with completed sections as context
-        config: Configuration for the writing model
-
-    Returns:
-        Dict containing the newly written section
-    """
-    # Get configuration
-    configurable = Configuration.from_runnable_config(config)
-
-    # Get state
-    topic = state["topic"]
-    section = state["section"]
-    completed_report_sections = state["report_sections_from_research"]
-
-    # Format system instructions
-    system_instructions = final_section_writer_instructions.format(
-        topic=topic,
-        section_name=section.name,
-        section_topic=section.description,
-        context=completed_report_sections,
-        max_words=configurable.max_section_words,
-    )
-    system_instructions += f"\n\nPlease respond in **{configurable.language}** language."
-
-    # Generate section
-    writer_provider = get_config_value(configurable.writer_provider)
-    writer_model_name = get_config_value(configurable.writer_model)
-    writer_model_config = configurable.writer_model_config or {}
-    writer_model = init_chat_model(model=writer_model_name, model_provider=writer_provider, **writer_model_config)
-    section_content = writer_model.invoke(
-        [
-            SystemMessage(content=system_instructions),
-            HumanMessage(content="Generate a report section based on the provided sources."),
-        ]
-    )
-
-    # Write content to section
-    section.content = section_content.content
-
-    # Write the updated section to completed sections
-    return {"completed_sections": [section]}
+    return {"conclusion": conclusion_content.content}
 
 
 def gather_completed_sections(state: ReportState):
@@ -645,12 +577,15 @@ def compile_final_report(state: ReportState):
     sections = state["sections"]
     completed_sections = {s.name: s.content for s in state["completed_sections"]}
     introduction = state.get("introduction", "")
+    conclusion = state.get("conclusion", "")
+    all_urls = state.get("all_urls", [])
 
     # Compile report parts
     report_parts = []
 
     # Add introduction if available
     if introduction:
+        introduction = f"## Introduction\n\n{introduction}"
         report_parts.append(introduction)
 
     # Add all sections
@@ -658,42 +593,22 @@ def compile_final_report(state: ReportState):
         section.content = completed_sections[section.name]
         report_parts.append(section.content)
 
+    # Add conclusion if available
+    if conclusion:
+        conclusion = f"## Conclusion\n\n{conclusion}"
+        report_parts.append(conclusion)
+
     # Add references section
-    if "all_urls" in state and state["all_urls"]:
+    if all_urls:
+        # deduplicate URLs
+        dedup_all_urls = list(dict.fromkeys(all_urls))
         references = "## References\n\n"
-        for i, url in enumerate(state["all_urls"], 1):
+        for i, url in enumerate(dedup_all_urls, 1):
             references += f"[{i}] {url}\n"
         report_parts.append(references)
 
     all_sections = "\n\n".join(report_parts)
     return {"final_report": all_sections}
-
-
-def initiate_final_section_writing(state: ReportState):
-    """Create parallel tasks for writing non-research sections.
-
-    This edge function identifies sections that don't need research and
-    creates parallel writing tasks for each one.
-
-    Args:
-        state: Current state with all sections and research context
-
-    Returns:
-        List of Send commands for parallel section writing
-    """
-    # Kick off section writing in parallel via Send() API for any sections that do not require research
-    return [
-        Send(
-            "write_final_sections",
-            {
-                "topic": state["topic"],
-                "section": s,
-                "report_sections_from_research": state["report_sections_from_research"],
-            },
-        )
-        for s in state["sections"]
-        if (not s.research) and (s.name.lower() != "conclusion") and (s.name.lower() != "introduction")
-    ]
 
 
 # Deep research node --
@@ -909,9 +824,8 @@ builder.add_node("generate_report_plan", generate_report_plan)
 builder.add_node("human_feedback", human_feedback)
 builder.add_node("build_section_with_web_research", section_builder.compile())
 builder.add_node("gather_completed_sections", gather_completed_sections)
-builder.add_node("write_final_sections", write_final_sections)
 builder.add_node("compile_final_report", compile_final_report)
-builder.add_node("write_conclusion", write_conclusion)
+builder.add_node("generate_conclusion", generate_conclusion)
 
 
 # Add edges
@@ -920,14 +834,8 @@ builder.add_edge("determine_if_question", "generate_introduction")
 builder.add_edge("generate_introduction", "generate_report_plan")
 builder.add_edge("generate_report_plan", "human_feedback")
 builder.add_edge("build_section_with_web_research", "gather_completed_sections")
-
-builder.add_conditional_edges(
-    "gather_completed_sections",
-    initiate_final_section_writing,
-    ["write_final_sections"],
-)
-builder.add_edge("write_final_sections", "write_conclusion")
-builder.add_edge("write_conclusion", "compile_final_report")
+builder.add_edge("gather_completed_sections", "generate_conclusion")
+builder.add_edge("generate_conclusion", "compile_final_report")
 builder.add_edge("compile_final_report", END)
 
 graph = builder.compile()
