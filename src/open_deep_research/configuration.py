@@ -48,7 +48,7 @@ class Configuration:
     max_introduction_words: int = 500  # イントロダクションの最大単語数
     max_conclusion_words: int = 500  # 結論の最大単語数
 
-    enable_deep_research: bool = True
+    enable_deep_research: bool = False
     deep_research_depth: int = 1
     deep_research_breadth: int = 2
 
