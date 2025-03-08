@@ -35,9 +35,13 @@ from open_deep_research.state import (
     SubTopics,
 )
 from open_deep_research.utils import (
+    count_detail_analysis_sections,
+    detect_main_section_level,
     format_sections,
+    generate_detail_heading,
     get_config_value,
     get_search_params,
+    normalize_heading_level,
     select_and_execute_search,
 )
 
@@ -751,11 +755,25 @@ def deep_research_writer(state: SectionState, config: RunnableConfig):
         )
         subsections.append(subsection_content.content)
 
-    updated_content = section.content
-    if "## " in updated_content and "### " not in updated_content:
-        updated_content += "\n\n" + "\n\n".join(subsections)
-    else:
-        updated_content += "\n\n## 詳細分析\n\n" + "\n\n".join(subsections)
+    # Update section content with subsections
+    updated_content = section.content.strip()
+    print(updated_content)
+
+    main_heading_level = detect_main_section_level(updated_content)
+    print(main_heading_level)
+    subsection_level = main_heading_level + 1
+    detail_heading_level = main_heading_level  # 詳細分析セクションの見出しレベル（通常はメインと同じ）
+
+    # 見出しレベルを正規化し、サブセクションを追加
+    normalized_subsections = []
+    for subsection in subsections:
+        normalized_subsections.append(normalize_heading_level(subsection, subsection_level))
+    formatted_subsections = "\n\n".join(normalized_subsections)
+
+    # 詳細分析セクション数に基づいて詳細分析セクションの見出しを生成
+    detail_count = count_detail_analysis_sections(updated_content)
+    detail_heading = generate_detail_heading(level=detail_heading_level, count=detail_count)
+    updated_content += "\n\n" + detail_heading + "\n\n" + formatted_subsections
 
     # update section with new content
     updated_section = section.copy()

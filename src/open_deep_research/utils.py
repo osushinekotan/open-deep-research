@@ -891,3 +891,86 @@ async def select_and_execute_search(search_api: str, query_list: list[str], para
         return deduplicate_and_format_sources(search_results, max_tokens_per_source=4000)
     else:
         raise ValueError(f"Unsupported search API: {search_api}")
+
+
+def normalize_heading_level(content, target_level):
+    """
+    コンテンツ内の見出しレベルを指定のレベルに正規化する
+    target_level: 3 なら ### (H3)、4 なら #### (H4) など
+    """
+    lines = content.split("\n")
+    normalized_lines = []
+
+    for line in lines:
+        if line.strip().startswith("#"):
+            # 現在の見出しレベルを検出
+            heading_match = line.lstrip()
+            hash_count = 0
+            for char in heading_match:
+                if char == "#":
+                    hash_count += 1
+                else:
+                    break
+
+            # 見出しテキストを抽出
+            heading_text = line.strip()[hash_count:].strip()
+
+            # 指定されたレベルの見出しとして再構築
+            normalized_lines.append("#" * target_level + " " + heading_text)
+        else:
+            normalized_lines.append(line)
+
+    return "\n".join(normalized_lines)
+
+
+def detect_main_section_level(content):
+    """メインセクションの見出しレベルを検出"""
+
+    min_level = 6  # 最も小さい見出しレベルを追跡
+    found = False
+
+    # 行ごとにチェック
+    for line in content.split("\n"):
+        line = line.strip()
+        if line.startswith("#"):
+            # #の個数をカウント
+            level = 0
+            for char in line:
+                if char == "#":
+                    level += 1
+                else:
+                    break
+
+            # 最小レベルを更新
+            if level < min_level and level > 0:
+                min_level = level
+                found = True
+    return min_level if found else 2
+
+
+def count_detail_analysis_sections(content):
+    """既存の詳細分析セクションの数を数える"""
+    count = 0
+
+    # 正規表現でマッチングするよりも単純に行ごとに確認する方法
+    lines = content.split("\n")
+    for line in lines:
+        line = line.strip()
+        # 詳細分析、詳細解析、詳細分析1、詳細分析2などをカウント
+        if (
+            any(line.endswith(suffix) for suffix in [" 詳細分析", " 詳細解析"])
+            or any(line.endswith(f" 詳細分析{i}") for i in range(1, 10))
+            or any(line.endswith(f" 詳細解析{i}") for i in range(1, 10))
+        ):
+            count += 1
+
+    return count
+
+
+def generate_detail_heading(level, count):
+    """詳細分析セクションの見出しを生成"""
+    # 初回は「詳細分析」、2回目以降は「詳細分析1」「詳細分析2」などインデックス付きで
+    if count == 0:
+        return "#" * level + " 詳細分析"
+    else:
+        return "#" * level + f" 詳細分析{count + 1}"
