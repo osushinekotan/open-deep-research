@@ -13,6 +13,8 @@ from open_deep_research.prompts import (
     deep_research_queries_instructions,
     deep_research_writer_instructions,
     final_section_writer_instructions,
+    introduction_query_writer_instructions,
+    introduction_writer_instructions,
     query_writer_instructions,
     report_planner_instructions,
     report_planner_query_writer_instructions,
@@ -41,6 +43,112 @@ from open_deep_research.utils import (
 ## Nodes --
 
 
+def extract_urls_from_search_results(source_str: str) -> list[str]:
+    """Extract URLs and titles from search results and format as Markdown links.
+
+    Args:
+        source_str: Formatted string containing search results
+
+    Returns:
+        List of formatted Markdown links from the search results
+    """
+    markdown_links = []
+    lines = source_str.split("\n")
+    current_title = ""
+
+    for _, line in enumerate(lines):
+        if line.startswith("Source: "):
+            current_title = line[8:].strip()
+
+        elif line.startswith("URL: ") and current_title:
+            url = line[5:].strip()
+            if url:
+                # generate link
+                markdown_link = f"[{current_title}]({url})"
+                if markdown_link not in markdown_links:
+                    markdown_links.append(markdown_link)
+
+                # reset title
+                current_title = ""
+
+    return markdown_links
+
+
+async def generate_introduction(state: ReportState, config: RunnableConfig):
+    """Generate an introduction for the report.
+
+    This node:
+    1. Generates search queries to gather background information
+    2. Performs web searches using those queries
+    3. Uses an LLM to generate an introduction based on search results
+
+    Args:
+        state: Current graph state containing the report topic
+        config: Configuration for models, search APIs, etc.
+
+    Returns:
+        Dict containing the generated introduction and collected URLs
+    """
+    # Inputs
+    topic = state["topic"]
+
+    # Get configuration
+    configurable = Configuration.from_runnable_config(config)
+    number_of_queries = configurable.number_of_queries
+    search_api = get_config_value(configurable.search_api)
+    search_api_config = configurable.search_api_config or {}
+    params_to_pass = get_search_params(search_api, search_api_config)
+
+    # Set writer model (model used for query writing)
+    writer_provider = get_config_value(configurable.writer_provider)
+    writer_model_name = get_config_value(configurable.writer_model)
+    writer_model_config = configurable.writer_model_config or {}
+    writer_model = init_chat_model(model=writer_model_name, model_provider=writer_provider, **writer_model_config)
+    structured_llm = writer_model.with_structured_output(Queries)
+
+    # Format system instructions
+    system_instructions_query = introduction_query_writer_instructions.format(
+        topic=topic,
+        number_of_queries=number_of_queries,
+    )
+    system_instructions_query += f"\n\nPlease respond in **{configurable.language}** language."
+
+    # Generate queries
+    results = structured_llm.invoke(
+        [
+            SystemMessage(content=system_instructions_query),
+            HumanMessage(content="Generate search queries that will help with writing an introduction for the report."),
+        ]
+    )
+
+    # Web search
+    query_list = [query.search_query for query in results.queries]
+    source_str = await select_and_execute_search(search_api, query_list, params_to_pass)
+
+    # Extract URLs from search results for references
+    urls = extract_urls_from_search_results(source_str)
+
+    # Generate introduction
+    system_instructions = introduction_writer_instructions.format(
+        topic=topic,
+        context=source_str,
+    )
+    system_instructions += f"\n\nPlease respond in **{configurable.language}** language."
+
+    # Write introduction
+    introduction_content = writer_model.invoke(
+        [
+            SystemMessage(content=system_instructions),
+            HumanMessage(content="Write an introduction for the report based on the provided sources."),
+        ]
+    )
+
+    return {
+        "introduction": introduction_content.content,
+        "all_urls": urls,
+    }
+
+
 async def generate_report_plan(state: ReportState, config: RunnableConfig):
     """Generate the initial report plan with sections.
 
@@ -60,6 +168,7 @@ async def generate_report_plan(state: ReportState, config: RunnableConfig):
     # Inputs
     topic = state["topic"]
     feedback = state.get("feedback_on_report_plan", None)
+    introduction = state.get("introduction", "")
 
     # Get configuration
     configurable = Configuration.from_runnable_config(config)
@@ -106,7 +215,7 @@ async def generate_report_plan(state: ReportState, config: RunnableConfig):
     system_instructions_sections = report_planner_instructions.format(
         topic=topic,
         report_organization=report_structure,
-        context=source_str,
+        context=source_str + "\n\nINTRODUCTION:\n" + introduction if introduction else source_str,
         feedback=feedback,
     )
     system_instructions_sections += f"\n\nPlease respond in **{configurable.language}** language."
@@ -304,6 +413,7 @@ def write_section(state: SectionState, config: RunnableConfig) -> Command[Litera
     topic = state["topic"]
     section = state["section"]
     source_str = state["source_str"]
+    urls = extract_urls_from_search_results(source_str)
 
     # Get configuration
     configurable = Configuration.from_runnable_config(config)
@@ -362,14 +472,13 @@ def write_section(state: SectionState, config: RunnableConfig) -> Command[Litera
         ]
     )
 
-    # If the section is passing or the max search depth is reached, publish the section to completed sections
+    # If the section is passing or the max search depth is reached
     if feedback.grade == "pass" or state["search_iterations"] >= configurable.max_reflection:
-        # Publish the section to completed sections
-        return Command(update={"completed_sections": [section]}, goto=END)
-    # Update the existing section with new content and update search queries
+        # Publish the section and URLs
+        return Command(update={"completed_sections": [section], "all_urls": urls}, goto=END)
     else:
         return Command(
-            update={"search_queries": feedback.follow_up_queries, "section": section},
+            update={"search_queries": feedback.follow_up_queries, "section": section, "all_urls": urls},
             goto="search_web",
         )
 
@@ -445,30 +554,32 @@ def gather_completed_sections(state: ReportState):
 
 
 def compile_final_report(state: ReportState):
-    """Compile all sections into the final report.
-
-    This node:
-    1. Gets all completed sections
-    2. Orders them according to original plan
-    3. Combines them into the final report
-
-    Args:
-        state: Current state with all completed sections
-
-    Returns:
-        Dict containing the complete report
-    """
+    """Compile all sections into the final report with references."""
     # Get sections
     sections = state["sections"]
     completed_sections = {s.name: s.content for s in state["completed_sections"]}
+    introduction = state.get("introduction", "")
 
-    # Update sections with completed content while maintaining original order
+    # Compile report parts
+    report_parts = []
+
+    # Add introduction if available
+    if introduction:
+        report_parts.append(introduction)
+
+    # Add all sections
     for section in sections:
         section.content = completed_sections[section.name]
+        report_parts.append(section.content)
 
-    # Compile final report
-    all_sections = "\n\n".join([s.content for s in sections])
+    # Add references section
+    if "all_urls" in state and state["all_urls"]:
+        references = "## References\n\n"
+        for i, url in enumerate(state["all_urls"], 1):
+            references += f"[{i}] {url}\n"
+        report_parts.append(references)
 
+    all_sections = "\n\n".join(report_parts)
     return {"final_report": all_sections}
 
 
@@ -610,6 +721,11 @@ def deep_research_writer(state: SectionState, config: RunnableConfig):
     current_depth = state["current_depth"]
     results_by_subtopic = state["deep_research_results"]
 
+    # Extract URLs from deep research results
+    urls = []
+    for _, search_results in results_by_subtopic.items():
+        urls.extend(extract_urls_from_search_results(search_results))
+
     writer_provider = get_config_value(configurable.writer_provider)
     writer_model_name = get_config_value(configurable.writer_model)
     writer_model_config = configurable.writer_model_config or {}
@@ -644,10 +760,13 @@ def deep_research_writer(state: SectionState, config: RunnableConfig):
     updated_section.content = updated_content
 
     if current_depth >= max_depth:
-        return Command(update={"section": updated_section, "completed_sections": [updated_section]}, goto=END)
+        return Command(
+            update={"section": updated_section, "completed_sections": [updated_section], "all_urls": urls}, goto=END
+        )
     else:
         return Command(
-            update={"section": updated_section, "current_depth": current_depth}, goto="deep_research_planner"
+            update={"section": updated_section, "current_depth": current_depth, "all_urls": urls},
+            goto="deep_research_planner",
         )
 
 
@@ -697,6 +816,7 @@ builder = StateGraph(
     output=ReportStateOutput,
     config_schema=Configuration,
 )
+builder.add_node("generate_introduction", generate_introduction)
 builder.add_node("generate_report_plan", generate_report_plan)
 builder.add_node("human_feedback", human_feedback)
 builder.add_node("build_section_with_web_research", section_builder.compile())
@@ -705,7 +825,8 @@ builder.add_node("write_final_sections", write_final_sections)
 builder.add_node("compile_final_report", compile_final_report)
 
 # Add edges
-builder.add_edge(START, "generate_report_plan")
+builder.add_edge(START, "generate_introduction")
+builder.add_edge("generate_introduction", "generate_report_plan")
 builder.add_edge("generate_report_plan", "human_feedback")
 builder.add_edge("build_section_with_web_research", "gather_completed_sections")
 builder.add_conditional_edges(

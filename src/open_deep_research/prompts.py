@@ -1,3 +1,45 @@
+introduction_query_writer_instructions = """You are performing research for a report introduction.
+
+<Report topic>
+{topic}
+</Report topic>
+
+<Task>
+Your goal is to generate {number_of_queries} web search queries that will help gather information for writing an introduction to the report.
+
+The queries should:
+1. Be related to the Report topic
+2. Help gather background information and context on the topic
+3. Focus on getting high-level overview information
+
+Make the queries specific enough to find high-quality, relevant sources while focusing on introductory content.
+</Task>
+"""
+
+introduction_writer_instructions = """Write an introduction for a research report.
+
+<Report topic>
+{topic}
+</Report topic>
+
+<Source material>
+{context}
+</Source material>
+
+<Task>
+Use the provided source material to write an introduction for a report on the given topic.
+
+Your introduction should:
+1. Provide background context on the topic
+2. Establish why the topic is important or relevant
+3. Briefly outline the scope of the report
+4. Be concise (150-200 words)
+5. Use clear, engaging language
+
+Reference sources inline by adding superscript numbers [1], [2], etc. that correspond to the sources you are drawing information from.
+</Task>
+"""
+
 report_planner_query_writer_instructions = """You are performing research for a report.
 
 <Report topic>
@@ -41,17 +83,18 @@ Here is context to use to plan the sections of the report:
 Generate a list of sections for the report. Your plan should be tight and focused with NO overlapping sections or unnecessary filler.
 
 For example, a good report structure might look like:
-1/ intro
-2/ overview of topic A
-3/ overview of topic B
-4/ comparison between A and B
-5/ conclusion
+1/ overview of topic A
+2/ overview of topic B
+3/ comparison between A and B
+4/ conclusion
+
+**caution: do not include `introduction` sections in the plan.**
 
 Each section should have the fields:
 
 - Name - Name for this section of the report.
 - Description - Brief overview of the main topics covered in this section.
-- Research - Whether to perform web research for this section of the report.
+- Research - Whether to perform web research for this section of the report. (default: True, but `conclusion`, `summary`. or `introduction` sections should be False)
 - Content - The content of the section, which you will leave blank for now.
 
 Integration guidelines:
@@ -97,7 +140,7 @@ section_writer_instructions = """Write one section of a research report.
 2. If present, review any existing section content.
 3. Then, look at the provided Source material.
 4. Decide the sources that you will use it to write a report section.
-5. Write the report section and list your sources.
+5. Write the report section with inline citations.
 </Task>
 
 <Writing Guidelines>
@@ -110,20 +153,19 @@ section_writer_instructions = """Write one section of a research report.
 </Writing Guidelines>
 
 <Citation Rules>
-- Assign each unique URL a single citation number in your text
-- End with ### Sources that lists each source with corresponding numbers
-- IMPORTANT: Number sources sequentially without gaps (1,2,3,4...) in the final list regardless of which sources you choose
-- Example format:
-  [1] Source Title: URL
-  [2] Source Title: URL
+- Use inline citations by adding superscript numbers where appropriate [1], [2], etc.
+- Each citation should directly correspond to a source URL
+- Number sources sequentially without gaps (1,2,3,4...)
+- DO NOT include a separate "Sources" section at the end of your content
 </Citation Rules>
 
 <Final Check>
-1. Verify that EVERY claim is grounded in the provided Source material
-2. Confirm each URL appears ONLY ONCE in the Source list
-3. Verify that sources are numbered sequentially (1,2,3...) without any gaps
+1. Verify that EVERY claim is grounded in the provided Source material and has an appropriate citation
+2. Confirm each citation is used correctly and corresponds to the right source
+3. Verify that citations are numbered sequentially (1,2,3...) without any gaps
 </Final Check>
 """
+
 
 section_writer_inputs = """
 <Report topic>
@@ -319,9 +361,10 @@ deep_research_writer_instructions = """あなたは技術文書作成の専門�
 1. マークダウン形式で、### レベルのヘッダー（サブセクションタイトル）から始める
 2. 明確で簡潔な表現を使用する
 3. 検索結果に基づいた事実を提示する
-4. 適切に情報源を引用する
+4. 情報源を引用する際は、関連する単語やフレーズに直接 [1], [2] などの形式で引用番号を埋め込む
 5. 200-300語程度に収める
 
 サブセクションは元のセクションの一部として読めるようになっていることが重要です。
+引用リストや「出典」セクションは含めないでください。引用はすべて本文中に埋め込んでください。
 </Task>
 """

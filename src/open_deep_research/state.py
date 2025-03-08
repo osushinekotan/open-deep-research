@@ -55,6 +55,8 @@ class ReportState(TypedDict):
     completed_sections: Annotated[list, operator.add]  # Send() API key
     report_sections_from_research: str  # String of any completed sections from research to write final sections
     final_report: str  # Final report
+    introduction: str  # Introduction section
+    all_urls: Annotated[list[str], operator.add]  # List of all URLs referenced
 
 
 class SectionState(TypedDict):
