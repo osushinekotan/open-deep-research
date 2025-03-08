@@ -40,7 +40,10 @@ def get_search_params(search_api: str, search_api_config: Optional[dict[str, Any
             "exclude_domains",
             "subpages",
         ],
-        "tavily": [],  # Tavily currently accepts no additional parameters
+        "tavily": [
+            "max_results",
+            "include_raw_content",
+        ],  # Tavily currently accepts no additional parameters
         "perplexity": [],  # Perplexity accepts no additional parameters
         "arxiv": ["load_max_docs", "get_full_documents", "load_all_available_meta"],
         "pubmed": ["top_k_results", "email", "api_key", "doc_content_chars_max"],
@@ -131,7 +134,11 @@ Content:
 
 
 @traceable
-async def tavily_search_async(search_queries):
+async def tavily_search_async(
+    search_queries,
+    max_results=5,
+    include_raw_content=True,
+):
     """
     Performs concurrent web searches using the Tavily API.
 
@@ -160,7 +167,14 @@ async def tavily_search_async(search_queries):
     tavily_async_client = AsyncTavilyClient()
     search_tasks = []
     for query in search_queries:
-        search_tasks.append(tavily_async_client.search(query, max_results=5, include_raw_content=True, topic="general"))
+        search_tasks.append(
+            tavily_async_client.search(
+                query,
+                max_results=max_results,
+                include_raw_content=include_raw_content,
+                topic="general",
+            )
+        )
 
     # Execute all searches concurrently
     search_docs = await asyncio.gather(*search_tasks)

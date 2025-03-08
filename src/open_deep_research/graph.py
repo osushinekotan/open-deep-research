@@ -72,7 +72,8 @@ async def generate_report_plan(state: ReportState, config: RunnableConfig):
     # Set writer model (model used for query writing)
     writer_provider = get_config_value(configurable.writer_provider)
     writer_model_name = get_config_value(configurable.writer_model)
-    writer_model = init_chat_model(model=writer_model_name, model_provider=writer_provider, temperature=0)
+    writer_model_config = configurable.writer_model_config or {}
+    writer_model = init_chat_model(model=writer_model_name, model_provider=writer_provider, **writer_model_config)
     structured_llm = writer_model.with_structured_output(Queries)
 
     # Format system instructions
@@ -81,6 +82,7 @@ async def generate_report_plan(state: ReportState, config: RunnableConfig):
         report_organization=report_structure,
         number_of_queries=number_of_queries,
     )
+    system_instructions_query += f"\n\nPlease respond in **{configurable.language}** language."
 
     # Generate queries
     results = structured_llm.invoke(
@@ -103,28 +105,23 @@ async def generate_report_plan(state: ReportState, config: RunnableConfig):
         context=source_str,
         feedback=feedback,
     )
+    system_instructions_sections += f"\n\nPlease respond in **{configurable.language}** language."
 
     # Set the planner
     planner_provider = get_config_value(configurable.planner_provider)
     planner_model = get_config_value(configurable.planner_model)
+    planner_model_config = configurable.planner_model_config or {}
 
     # Report planner instructions
     planner_message = """Generate the sections of the report. Your response must include a 'sections' field containing a list of sections.
                         Each section must have: name, description, plan, research, and content fields."""
 
-    # Run the planner
-    if planner_model == "claude-3-7-sonnet-latest":
-        # Allocate a thinking budget for claude-3-7-sonnet-latest as the planner model
-        planner_llm = init_chat_model(
-            model=planner_model,
-            model_provider=planner_provider,
-            max_tokens=20_000,
-            thinking={"type": "enabled", "budget_tokens": 16_000},
-        )
-
-    else:
-        # With other models, we can use with_structured_output
-        planner_llm = init_chat_model(model=planner_model, model_provider=planner_provider)
+    # With other models, we can use with_structured_output
+    planner_llm = init_chat_model(
+        model=planner_model,
+        model_provider=planner_provider,
+        **planner_model_config,
+    )
 
     # Generate the report sections
     structured_llm = planner_llm.with_structured_output(Sections)
@@ -223,7 +220,8 @@ def generate_queries(state: SectionState, config: RunnableConfig):
     # Generate queries
     writer_provider = get_config_value(configurable.writer_provider)
     writer_model_name = get_config_value(configurable.writer_model)
-    writer_model = init_chat_model(model=writer_model_name, model_provider=writer_provider, temperature=0)
+    writer_model_config = configurable.writer_model_config or {}
+    writer_model = init_chat_model(model=writer_model_name, model_provider=writer_provider, **writer_model_config)
     structured_llm = writer_model.with_structured_output(Queries)
 
     # Format system instructions
@@ -232,6 +230,7 @@ def generate_queries(state: SectionState, config: RunnableConfig):
         section_topic=section.description,
         number_of_queries=number_of_queries,
     )
+    system_instructions += f"\n\nPlease respond in **{configurable.language}** language."
 
     # Generate queries
     queries = structured_llm.invoke(
@@ -317,7 +316,8 @@ def write_section(state: SectionState, config: RunnableConfig) -> Command[Litera
     # Generate section
     writer_provider = get_config_value(configurable.writer_provider)
     writer_model_name = get_config_value(configurable.writer_model)
-    writer_model = init_chat_model(model=writer_model_name, model_provider=writer_provider, temperature=0)
+    writer_model_config = configurable.writer_model_config or {}
+    writer_model = init_chat_model(model=writer_model_name, model_provider=writer_provider, **writer_model_config)
     section_content = writer_model.invoke(
         [
             SystemMessage(content=section_writer_instructions),
@@ -343,18 +343,13 @@ def write_section(state: SectionState, config: RunnableConfig) -> Command[Litera
     # Use planner model for reflection
     planner_provider = get_config_value(configurable.planner_provider)
     planner_model = get_config_value(configurable.planner_model)
-    if planner_model == "claude-3-7-sonnet-latest":
-        # Allocate a thinking budget for claude-3-7-sonnet-latest as the planner model
-        reflection_model = init_chat_model(
-            model=planner_model,
-            model_provider=planner_provider,
-            max_tokens=20_000,
-            thinking={"type": "enabled", "budget_tokens": 16_000},
-        ).with_structured_output(Feedback)
-    else:
-        reflection_model = init_chat_model(model=planner_model, model_provider=planner_provider).with_structured_output(
-            Feedback
-        )
+    planner_model_config = configurable.planner_model_config or {}
+    reflection_model = init_chat_model(
+        model=planner_model,
+        model_provider=planner_provider,
+        **planner_model_config,
+    ).with_structured_output(Feedback)
+
     # Generate feedback
     feedback = reflection_model.invoke(
         [
@@ -403,11 +398,13 @@ def write_final_sections(state: SectionState, config: RunnableConfig):
         section_topic=section.description,
         context=completed_report_sections,
     )
+    system_instructions += f"\n\nPlease respond in **{configurable.language}** language."
 
     # Generate section
     writer_provider = get_config_value(configurable.writer_provider)
     writer_model_name = get_config_value(configurable.writer_model)
-    writer_model = init_chat_model(model=writer_model_name, model_provider=writer_provider, temperature=0)
+    writer_model_config = configurable.writer_model_config or {}
+    writer_model = init_chat_model(model=writer_model_name, model_provider=writer_provider, **writer_model_config)
     section_content = writer_model.invoke(
         [
             SystemMessage(content=system_instructions),
