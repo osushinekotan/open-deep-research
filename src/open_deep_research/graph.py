@@ -9,6 +9,9 @@ from langgraph.types import Command, interrupt
 
 from open_deep_research.configuration import Configuration
 from open_deep_research.prompts import (
+    deep_research_planner_instructions,
+    deep_research_queries_instructions,
+    deep_research_writer_instructions,
     final_section_writer_instructions,
     query_writer_instructions,
     report_planner_instructions,
@@ -26,6 +29,7 @@ from open_deep_research.state import (
     SectionOutputState,
     Sections,
     SectionState,
+    SubTopics,
 )
 from open_deep_research.utils import (
     format_sections,
@@ -359,7 +363,7 @@ def write_section(state: SectionState, config: RunnableConfig) -> Command[Litera
     )
 
     # If the section is passing or the max search depth is reached, publish the section to completed sections
-    if feedback.grade == "pass" or state["search_iterations"] >= configurable.max_search_depth:
+    if feedback.grade == "pass" or state["search_iterations"] >= configurable.max_reflection:
         # Publish the section to completed sections
         return Command(update={"completed_sections": [section]}, goto=END)
     # Update the existing section with new content and update search queries
@@ -495,6 +499,158 @@ def initiate_final_section_writing(state: ReportState):
     ]
 
 
+# Deep research node --
+
+
+def deep_research_planner(state: SectionState, config: RunnableConfig):
+    # Get configuration
+    configurable = Configuration.from_runnable_config(config)
+    breadth = configurable.deep_research_breadth
+
+    # Get state
+    topic = state["topic"]
+    section = state["section"]
+    current_depth = state.get("current_depth", 0)
+
+    # Get planner model
+    planner_provider = get_config_value(configurable.planner_provider)
+    planner_model = get_config_value(configurable.planner_model)
+    planner_model_config = configurable.planner_model_config or {}
+    planner_llm = init_chat_model(
+        model=planner_model,
+        model_provider=planner_provider,
+        **planner_model_config,
+    )
+
+    system_instructions = deep_research_planner_instructions.format(
+        topic=topic,
+        section_name=section.name,
+        section_content=section.content,
+        current_depth=current_depth,
+        breadth=breadth,
+    )
+    system_instructions += f"\n\nPlease respond in **{configurable.language}** language."
+
+    # Generate subtopics
+    subtopics_response = planner_llm.with_structured_output(SubTopics).invoke(
+        [
+            SystemMessage(content=system_instructions),
+            HumanMessage(content="セクションの内容に基づいて、掘り下げるべきサブトピックを特定してください。"),
+        ]
+    )
+
+    return {"deep_research_topics": subtopics_response.subtopics, "current_depth": current_depth + 1}
+
+
+def generate_deep_research_queries(state: SectionState, config: RunnableConfig):
+    # Get configuration
+    configurable = Configuration.from_runnable_config(config)
+    number_of_queries = configurable.number_of_queries
+
+    # Get state
+    topic = state["topic"]
+    section = state["section"]
+    subtopics = state["deep_research_topics"]
+
+    # Get writer model
+    writer_provider = get_config_value(configurable.writer_provider)
+    writer_model_name = get_config_value(configurable.writer_model)
+    writer_model_config = configurable.writer_model_config or {}
+    writer_model = init_chat_model(model=writer_model_name, model_provider=writer_provider, **writer_model_config)
+
+    queries_by_subtopic = {}
+    # Generate queries for each subtopic
+    for subtopic in subtopics:
+        system_instructions = deep_research_queries_instructions.format(
+            topic=topic,
+            section_name=section.name,
+            subtopic_name=subtopic.name,
+            subtopic_description=subtopic.description,
+            number_of_queries=number_of_queries,
+        )
+        system_instructions += f"\n\nPlease respond in **{configurable.language}** language."
+
+        structured_llm = writer_model.with_structured_output(Queries)
+        queries = structured_llm.invoke(
+            [
+                SystemMessage(content=system_instructions),
+                HumanMessage(content="このサブトピックに関する検索クエリを生成してください。"),
+            ]
+        )
+        queries_by_subtopic[subtopic.name] = queries.queries
+
+    return {"deep_research_queries": queries_by_subtopic}
+
+
+async def deep_research_search(state: SectionState, config: RunnableConfig):
+    # Get configuration
+    configurable = Configuration.from_runnable_config(config)
+    search_api = get_config_value(configurable.search_api)
+    search_api_config = configurable.search_api_config or {}
+    params_to_pass = get_search_params(search_api, search_api_config)
+    queries_by_subtopic = state["deep_research_queries"]
+
+    # Search the web for each subtopic
+    results_by_subtopic = {}
+    for subtopic_name, queries in queries_by_subtopic.items():
+        query_list = [query.search_query for query in queries]
+
+        subtopic_source_str = await select_and_execute_search(search_api, query_list, params_to_pass)
+        results_by_subtopic[subtopic_name] = subtopic_source_str
+
+    return {"deep_research_results": results_by_subtopic}
+
+
+def deep_research_writer(state: SectionState, config: RunnableConfig):
+    configurable = Configuration.from_runnable_config(config)
+    max_depth = configurable.deep_research_depth
+
+    topic = state["topic"]
+    section = state["section"]
+    current_depth = state["current_depth"]
+    results_by_subtopic = state["deep_research_results"]
+
+    writer_provider = get_config_value(configurable.writer_provider)
+    writer_model_name = get_config_value(configurable.writer_model)
+    writer_model_config = configurable.writer_model_config or {}
+    writer_model = init_chat_model(model=writer_model_name, model_provider=writer_provider, **writer_model_config)
+
+    subsections = []
+    for subtopic, search_results in results_by_subtopic.items():
+        system_instructions = deep_research_writer_instructions.format(
+            topic=topic,
+            section_name=section.name,
+            subtopic=subtopic,
+            search_results=search_results,
+        )
+        system_instructions += f"\n\nPlease respond in **{configurable.language}** language."
+
+        subsection_content = writer_model.invoke(
+            [
+                SystemMessage(content=system_instructions),
+                HumanMessage(content="検索結果に基づいてサブセクションを作成してください。"),
+            ]
+        )
+        subsections.append(subsection_content.content)
+
+    updated_content = section.content
+    if "## " in updated_content and "### " not in updated_content:
+        updated_content += "\n\n" + "\n\n".join(subsections)
+    else:
+        updated_content += "\n\n## 詳細分析\n\n" + "\n\n".join(subsections)
+
+    # update section with new content
+    updated_section = section.copy()
+    updated_section.content = updated_content
+
+    if current_depth >= max_depth:
+        return Command(update={"section": updated_section, "completed_sections": [updated_section]}, goto=END)
+    else:
+        return Command(
+            update={"section": updated_section, "current_depth": current_depth}, goto="deep_research_planner"
+        )
+
+
 # Report section sub-graph --
 
 # Add nodes
@@ -503,10 +659,34 @@ section_builder.add_node("generate_queries", generate_queries)
 section_builder.add_node("search_web", search_web)
 section_builder.add_node("write_section", write_section)
 
-# Add edges
+section_builder.add_node("deep_research_planner", deep_research_planner)
+section_builder.add_node("generate_deep_research_queries", generate_deep_research_queries)
+section_builder.add_node("deep_research_search", deep_research_search)
+section_builder.add_node("deep_research_writer", deep_research_writer)
+
 section_builder.add_edge(START, "generate_queries")
 section_builder.add_edge("generate_queries", "search_web")
 section_builder.add_edge("search_web", "write_section")
+
+
+def should_deep_research(state: SectionState) -> str:
+    """深掘り調査を行うかどうかを決定する関数"""
+    configurable = Configuration.from_runnable_config(state.get("config", {}))
+    if getattr(configurable, "enable_deep_research", False):
+        return "deep_research_planner"
+    return END
+
+
+# add deep research subgraph to section builder if deep research is enabled
+section_builder.add_conditional_edges(
+    "write_section",
+    should_deep_research,
+    ["deep_research_planner", END],
+)
+section_builder.add_edge("deep_research_planner", "generate_deep_research_queries")
+section_builder.add_edge("generate_deep_research_queries", "deep_research_search")
+section_builder.add_edge("deep_research_search", "deep_research_writer")
+section_builder.add_edge("deep_research_writer", END)
 
 # Outer graph for initial report plan compiling results from each section --
 

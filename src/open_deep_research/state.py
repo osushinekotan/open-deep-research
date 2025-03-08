@@ -66,6 +66,21 @@ class SectionState(TypedDict):
     report_sections_from_research: str  # String of any completed sections from research to write final sections
     completed_sections: list[Section]  # Final key we duplicate in outer state for Send() API
 
+    deep_research_topics: list  # 深掘りするトピックのリスト
+    current_depth: int  # 現在の深掘りの深さ
+    deep_research_queries: list  # 深掘り用の検索クエリ
+    deep_research_results: list  # 深掘り検索の結果
+
 
 class SectionOutputState(TypedDict):
     completed_sections: list[Section]  # Final key we duplicate in outer state for Send() API
+
+
+class SubTopic(BaseModel):
+    name: str = Field(description="深掘りするサブトピックの名前")
+    description: str = Field(description="このサブトピックが重要である理由と調査すべき具体的な側面")
+    key_questions: list[str] = Field(description="このサブトピックについて回答すべき重要な質問のリスト")
+
+
+class SubTopics(BaseModel):
+    subtopics: list[SubTopic] = Field(description="深掘りするサブトピックのリスト")

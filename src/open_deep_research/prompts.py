@@ -236,3 +236,92 @@ For Conclusion/Summary:
 - Markdown format
 - Do not include word count or any preamble in your response
 </Quality Checks>"""
+
+
+deep_research_planner_instructions = """
+あなたは研究プランナーです。以下のセクションの内容を分析し、より深く掘り下げるべき {breadth} 個のサブトピックを特定してください。
+
+<Report Topic>
+{topic}
+</Report Topic>
+
+<Section Name>
+{section_name}
+</Section Name>
+
+<Section Content>
+{section_content}
+</Section Content>
+
+<Current Depth>
+{current_depth}
+</Current Depth>
+
+<Task>
+このセクションの内容をより深く探索するための {breadth} 個の具体的なサブトピックを特定してください。
+各サブトピックについて：
+1. サブトピックの名前
+2. このサブトピックが重要な理由
+3. このサブトピックについて調査すべき具体的な側面や質問
+
+サブトピックは互いに重複せず、元のセクションの内容を深く掘り下げるものである必要があります。
+各サブトピックは正確で具体的であるべきです。
+</Task>
+"""
+
+deep_research_queries_instructions = """あなたは検索クエリ作成の専門家です。以下のサブトピックに関する詳細情報を収集するための検索クエリを生成してください。
+
+<Report Topic>
+{topic}
+</Report Topic>
+
+<Section Name>
+{section_name}
+</Section Name>
+
+<Subtopic>
+名前: {subtopic_name}
+説明: {subtopic_description}
+</Subtopic>
+
+<Task>
+このサブトピックについて深く掘り下げるための {number_of_queries} 個の検索クエリを生成してください。
+クエリは以下の特性を持つべきです：
+1. 具体的で明確であること
+2. サブトピックの異なる側面をカバーすること
+3. 主題に関連する最新かつ詳細な情報を返す可能性が高いこと
+
+各クエリは単独で使用でき、高品質なソース情報を見つけられるものにしてください。
+</Task>
+"""
+
+deep_research_writer_instructions = """あなたは技術文書作成の専門家です。以下の情報を使用して、レポートのサブセクションを作成してください。
+
+<Report Topic>
+{topic}
+</Report Topic>
+
+<Main Section>
+{section_name}
+</Main Section>
+
+<Subtopic>
+{subtopic}
+</Subtopic>
+
+<Search Results>
+{search_results}
+</Search Results>
+
+<Task>
+提供された検索結果を使用して、このサブトピックに関する詳細なサブセクションを作成してください。
+サブセクションは以下の特性を持つべきです：
+1. マークダウン形式で、### レベルのヘッダー（サブセクションタイトル）から始める
+2. 明確で簡潔な表現を使用する
+3. 検索結果に基づいた事実を提示する
+4. 適切に情報源を引用する
+5. 200-300語程度に収める
+
+サブセクションは元のセクションの一部として読めるようになっていることが重要です。
+</Task>
+"""

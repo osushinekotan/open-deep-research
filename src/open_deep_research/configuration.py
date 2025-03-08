@@ -45,7 +45,11 @@ class Configuration:
 
     report_structure: str = DEFAULT_REPORT_STRUCTURE  # Defaults to the default report structure
     number_of_queries: int = 2  # Number of search queries to generate per iteration
-    max_search_depth: int = 2  # Maximum number of reflection + search iterations
+    max_reflection: int = 2  # Maximum number of reflection + search iterations
+
+    enable_deep_research: bool = True
+    deep_research_depth: int = 1
+    deep_research_breadth: int = 2
 
     planner_provider: PlannerProvider = PlannerProvider.OPENAI
     planner_model: str = "gpt-4o"
